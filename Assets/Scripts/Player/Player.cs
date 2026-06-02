@@ -1,12 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 using DP.Utils;
 
-public class Player : Singleton<Player> {
-
+public class Player : Singleton<Player>
+{
     [SerializeField] private float movingSpeed = 15f;
     [SerializeField] private float dashSpeed = 4f;
     [SerializeField] private float dashTime = 0.2f;
@@ -22,6 +21,8 @@ public class Player : Singleton<Player> {
 
     public event EventHandler OnFlashBlink;
     public event EventHandler OnPlayerDeath;
+    public event EventHandler OnGoldCoinsChanged;
+    public event EventHandler OnHealthChanged;
 
     private Vector2 inputVector;
     private bool isRunning;
@@ -29,20 +30,24 @@ public class Player : Singleton<Player> {
     private float minMovingSpeed = .1f;
     private float initialMovingSpeed;
     private bool isDashing = false;
-    
 
     private int currentHealth;
     private bool canTakeDamage = true;
-
     private int currentGoldCoin = 0;
 
-    protected override void Awake() {
+    public int CurrentGoldCoins => currentGoldCoin;
+    public int CurrentHealth => currentHealth;
+    public int MaxHealth => maxHealth;
+
+    protected override void Awake()
+    {
         base.Awake();
         rb = GetComponent<Rigidbody2D>();
         knockBack = GetComponent<KnockBack>();
     }
 
-    private void Start() {
+    private void Start()
+    {
         initialMovingSpeed = movingSpeed;
         currentHealth = maxHealth;
         isAlive = true;
@@ -55,67 +60,119 @@ public class Player : Singleton<Player> {
         GameInput.Instance.OnInventoryKeyboard += GameInput_OnInventoryKeyboard;
     }
 
-    protected override void Update() {
+    protected override void Update()
+    {
         base.Update();
         inputVector = GameInput.Instance.GetMovementVector();
     }
 
-    private void FixedUpdate() {
-        if (knockBack.GettingKnockedBack) {
+    private void FixedUpdate()
+    {
+        if (knockBack.GettingKnockedBack)
+        {
             return;
         }
 
         HandleMovement();
     }
 
-    private void GameInput_OnInventoryKeyboard(object sender, GameInput.OnInventoryKeyboardEventArgs e) {
+    private void GameInput_OnInventoryKeyboard(object sender, GameInput.OnInventoryKeyboardEventArgs e)
+    {
         ActiveWeapon.Instance.SetCurrentWeaponSO(e.pressedKeyboardKey);
     }
 
-    private void GameInput_OnPlayerDash(object sender, System.EventArgs e) {
+    private void GameInput_OnPlayerDash(object sender, EventArgs e)
+    {
         Dash();
     }
 
-    private void GameInput_OnPlayerAttack(object sender, System.EventArgs e) {
-        ActiveWeapon.Instance.GetCurrentWeaponSO().weaponGameObject.Attack();
+    private void GameInput_OnPlayerAttack(object sender, EventArgs e)
+    {
+        WeaponSO weaponSO = ActiveWeapon.Instance.GetCurrentWeaponSO();
+        if (weaponSO == null || weaponSO.weaponGameObject == null)
+        {
+            return;
+        }
+
+        weaponSO.weaponGameObject.Attack();
     }
 
-
-    private void HandleMovement() {
+    private void HandleMovement()
+    {
         rb.MovePosition(rb.position + inputVector * movingSpeed * Time.fixedDeltaTime);
 
-        if (Mathf.Abs(inputVector.x) > minMovingSpeed || Mathf.Abs(inputVector.y) > minMovingSpeed) {
+        if (Mathf.Abs(inputVector.x) > minMovingSpeed || Mathf.Abs(inputVector.y) > minMovingSpeed)
+        {
             isRunning = true;
-        } else {
+        }
+        else
+        {
             isRunning = false;
         }
     }
 
-    public void HealPlayer(int healthAmount) {
-        currentHealth = Math.Min(maxHealth, currentHealth += healthAmount);
+    public void HealPlayer(int healthAmount)
+    {
+        currentHealth = Math.Min(maxHealth, currentHealth + healthAmount);
         HealthBar.Instance.SetHealth(currentHealth);
+        OnHealthChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public void AddGoldCoin(int goldCoinAmount) {
+    public void AddGoldCoin(int goldCoinAmount)
+    {
         currentGoldCoin += goldCoinAmount;
         GoldColnCounter.Instance.SetGoldCoinAmount(currentGoldCoin);
+        OnGoldCoinsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public bool IsRunning() {
+    public void SpendGoldCoins(int amount)
+    {
+        currentGoldCoin = Mathf.Max(0, currentGoldCoin - amount);
+        GoldColnCounter.Instance.SetGoldCoinAmount(currentGoldCoin);
+        OnGoldCoinsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public bool CanSpendGoldCoins(int amount)
+    {
+        return currentGoldCoin >= amount;
+    }
+
+    public bool TrySpendGoldCoins(int amount)
+    {
+        if (!CanSpendGoldCoins(amount))
+        {
+            return false;
+        }
+
+        SpendGoldCoins(amount);
+        return true;
+    }
+
+    public bool IsHealthFull()
+    {
+        return currentHealth >= maxHealth;
+    }
+
+    public bool IsRunning()
+    {
         return isRunning;
     }
 
-    public bool IsAlive() {
+    public bool IsAlive()
+    {
         return isAlive;
     }
 
-    private void Dash() {
-        if (!isDashing) {
+    private void Dash()
+    {
+        if (!isDashing)
+        {
             StartCoroutine(EndDashRoutine());
         }
     }
 
-    private IEnumerator EndDashRoutine() {
+    private IEnumerator EndDashRoutine()
+    {
         isDashing = true;
         movingSpeed *= dashSpeed;
         trailRenderer.emitting = true;
@@ -126,14 +183,18 @@ public class Player : Singleton<Player> {
         isDashing = false;
     }
 
-    public void TakeDamage(Transform damageSourceTransform, int damage) {
-        if (canTakeDamage && isAlive) {
-            currentHealth = Math.Max(0, currentHealth -= damage);
+    public void TakeDamage(Transform damageSourceTransform, int damage)
+    {
+        if (canTakeDamage && isAlive)
+        {
+            currentHealth = Math.Max(0, currentHealth - damage);
             HealthBar.Instance.SetHealth(currentHealth);
+            OnHealthChanged?.Invoke(this, EventArgs.Empty);
 
             ScreenShakeManager.Instance.ShakeScreen();
 
-            if (damageSourceTransform) {
+            if (damageSourceTransform)
+            {
                 knockBack.GetKnockedBack(damageSourceTransform);
             }
 
@@ -145,28 +206,27 @@ public class Player : Singleton<Player> {
         DetectDeath();
     }
 
-    private void DetectDeath() {
-        if (currentHealth == 0 && isAlive) {
+    private void DetectDeath()
+    {
+        if (currentHealth == 0 && isAlive)
+        {
             isAlive = false;
             GameInput.Instance.DisableMovement();
             knockBack.StopKnockBackMovement();
             OnPlayerDeath?.Invoke(this, EventArgs.Empty);
-      
             StartCoroutine(DelayAfterDeathRoutine());
         }
     }
 
-
-    private IEnumerator DamageRecoveryRoutine() {
+    private IEnumerator DamageRecoveryRoutine()
+    {
         yield return new WaitForSeconds(damageRecoveryTime);
         canTakeDamage = true;
     }
 
-    private IEnumerator DelayAfterDeathRoutine() {
+    private IEnumerator DelayAfterDeathRoutine()
+    {
         yield return new WaitForSeconds(delayAfterDeath);
         Loader.InstantLoad(Loader.Scene.GameOverScene);
     }
-
-
-
 }

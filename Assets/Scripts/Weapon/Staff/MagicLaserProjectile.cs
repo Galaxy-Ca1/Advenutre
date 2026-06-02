@@ -1,80 +1,131 @@
-using System;
 using System.Collections;
-using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.Rendering;
 
-public class MagicLaserProjectile : BaseProjectile {
-
-    [SerializeField] private Staff staff;
+public class MagicLaserProjectile : BaseProjectile
+{
     [SerializeField] private ProjectileSO projectileSO;
-    [SerializeField] private float laserGrowTime = 1f;
+    [SerializeField] private float laserGrowTime = 0.2f;
 
     private SpriteRenderer spriteRenderer;
-    private float spriteRendererSizeX;
-
     private CapsuleCollider2D capsuleCollider2D;
-    private float capsuleCollider2DSizeX;
-    private float capsuleCollider2DOffsetX;
-
+    private float startSpriteSizeX;
+    private float startColliderSizeX;
+    private float startColliderOffsetX;
     private Vector3 startPoint;
+    private bool isGrowing = true;
 
-    private void Awake() {
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        spriteRendererSizeX = spriteRenderer.size.x;
-
-        capsuleCollider2D = GetComponent<CapsuleCollider2D>();
-        capsuleCollider2DSizeX = capsuleCollider2D.size.x;
-        capsuleCollider2DOffsetX = capsuleCollider2D.offset.x;
+    public void Init(ProjectileSO projectileSettings)
+    {
+        projectileSO = projectileSettings;
     }
 
+    private void Awake()
+    {
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        capsuleCollider2D = GetComponent<CapsuleCollider2D>();
 
-    private void Start() {
+        if (spriteRenderer != null)
+        {
+            startSpriteSizeX = spriteRenderer.size.x;
+        }
+
+        if (capsuleCollider2D != null)
+        {
+            startColliderSizeX = capsuleCollider2D.size.x;
+            startColliderOffsetX = capsuleCollider2D.offset.x;
+        }
+    }
+
+    private void Start()
+    {
         LaserFaceMouse();
         startPoint = transform.position;
-        StartCoroutine(IncreaseLaserLengthRoutine());
+        StartCoroutine(GrowAndFadeRoutine());
     }
 
-    private void Update() {
-        DetectFireDistance(projectileSO, startPoint);
+    private void Update()
+    {
+        if (!isGrowing && projectileSO != null)
+        {
+            DetectFireDistance(projectileSO, startPoint);
+        }
     }
 
-    protected override void OnTriggerEnter2D(Collider2D collision) {
-        if (collision.transform.TryGetComponent(out EnemyEntity enemyEntity)) {
+    protected override void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (projectileSO != null && collision.transform.TryGetComponent(out EnemyEntity enemyEntity))
+        {
             enemyEntity.TakeDamage(projectileSO.projectileDamageAmout);
         }
 
         Indestructable indestructable = collision.gameObject.GetComponent<Indestructable>();
-        if (indestructable != null && !collision.isTrigger) {
+        if (indestructable != null && !collision.isTrigger)
+        {
             Destroy(gameObject);
         }
     }
 
-    private void LaserFaceMouse() {
+    private void LaserFaceMouse()
+    {
+        if (Camera.main == null || GameInput.Instance == null)
+        {
+            return;
+        }
+
         Vector3 mousePos = GameInput.Instance.GetMousePosition();
         Vector2 direction = Camera.main.WorldToScreenPoint(transform.position) - mousePos;
         transform.right = -direction;
     }
 
-    private IEnumerator IncreaseLaserLengthRoutine() {
+    private IEnumerator GrowAndFadeRoutine()
+    {
+        if (spriteRenderer == null || capsuleCollider2D == null)
+        {
+            Debug.LogError("[MagicLaserProjectile] SpriteRenderer or CapsuleCollider2D is missing.");
+            Destroy(gameObject);
+            yield break;
+        }
+
+        float range = GetLaserRange();
         float timePassed = 0f;
-        float laserRange = projectileSO.weaponSO.weaponProjectileRange;
 
-        while (spriteRenderer.size.x < laserRange) {
+        while (timePassed < laserGrowTime)
+        {
             timePassed += Time.deltaTime;
+            float t = Mathf.Clamp01(timePassed / laserGrowTime);
+            float newSizeX = Mathf.Lerp(startSpriteSizeX, range, t);
 
-            float linearTime = timePassed / laserGrowTime;
-
-            spriteRenderer.size = new Vector2(Mathf.Lerp(spriteRendererSizeX, laserRange, linearTime), spriteRenderer.size.y);
-            capsuleCollider2D.size = new Vector2(Mathf.Lerp(capsuleCollider2DSizeX, laserRange, linearTime), capsuleCollider2D.size.y);
-            capsuleCollider2D.offset = new Vector2(Mathf.Lerp(capsuleCollider2DOffsetX, laserRange, linearTime) / 2, capsuleCollider2D.offset.y);
+            spriteRenderer.size = new Vector2(newSizeX, spriteRenderer.size.y);
+            capsuleCollider2D.size = new Vector2(Mathf.Lerp(startColliderSizeX, range, t), capsuleCollider2D.size.y);
+            capsuleCollider2D.offset = new Vector2(Mathf.Lerp(startColliderOffsetX, range * 0.5f, t), capsuleCollider2D.offset.y);
 
             yield return null;
         }
 
-        StartCoroutine(GetComponent<SpriteFade>().FadeRoutine());
+        isGrowing = false;
 
+        SpriteFade spriteFade = GetComponent<SpriteFade>();
+        if (spriteFade != null)
+        {
+            yield return StartCoroutine(spriteFade.FadeRoutine());
+        }
+
+        Destroy(gameObject);
     }
 
+    private float GetLaserRange()
+    {
+        if (projectileSO != null && projectileSO.weaponSO != null && projectileSO.weaponSO.weaponProjectileRange > 0f)
+        {
+            return projectileSO.weaponSO.weaponProjectileRange;
+        }
+
+        if (projectileSO != null && projectileSO.projectileRange > 0f)
+        {
+            return projectileSO.projectileRange;
+        }
+
+        Debug.LogWarning("[MagicLaserProjectile] Laser range is not set. Using fallback range 5.");
+        return 5f;
+    }
 }

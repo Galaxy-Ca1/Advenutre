@@ -15,9 +15,15 @@ EditorBuildSettings:
     path: Assets/Scenes/Level2Scene.unity
     guid: ee71d4f7d94af7e4b95b8bd3cb0d3a55
   - enabled: 1
+    path: Assets/Scenes/Level3Scene.unity
+    guid: 350b5225f42d31c4e811ccb4d92a84d3
+  - enabled: 1
     path: Assets/Scenes/LoadingScene.unity
     guid: 47ba783b688adbd409de9bb857662078
   - enabled: 1
     path: Assets/Scenes/GameOverScene.unity
     guid: f078b8b13e306a44e805e4d633e58d4b
+  - enabled: 1
+    path: Assets/Scenes/Level4ShopScene.unity
+    guid: 83ad52198d0594c479a53f400356c5de
   m_configObjects: {}

@@ -1,95 +1,148 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using DP.Utils;
 
-public class ActiveWeapon : Singleton<ActiveWeapon> {
-
+public class ActiveWeapon : Singleton<ActiveWeapon>
+{
     [SerializeField] private WeaponSO[] weaponSOList;
 
     private WeaponSO currentWeaponSO;
     private bool isFlipped;
 
-    private void Start() {
+    private void Start()
+    {
         isFlipped = false;
-        currentWeaponSO = weaponSOList[0];
-        SetCurrentWeaponSO(currentWeaponSO.weaponKeyboardKey);
+
+        if (weaponSOList == null || weaponSOList.Length == 0)
+        {
+            Debug.LogError("[ActiveWeapon] Weapon list is empty.");
+            return;
+        }
+
+        SetCurrentWeaponSO(weaponSOList[0].weaponKeyboardKey);
     }
-    protected override void Update() {
+
+    protected override void Update()
+    {
         base.Update();
         SetActiveWeaponRotation();
     }
 
-    public WeaponSO GetCurrentWeaponSO() {
+    public WeaponSO GetCurrentWeaponSO()
+    {
         return currentWeaponSO;
     }
 
-    private void MouseFollowRotation() {
+    public void SetCurrentWeaponSO(int keyboardKey)
+    {
+        if (weaponSOList == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < weaponSOList.Length; i++)
+        {
+            if (weaponSOList[i] != null && weaponSOList[i].weaponKeyboardKey == keyboardKey)
+            {
+                ActivateWeapon(weaponSOList[i]);
+                break;
+            }
+        }
+    }
+
+    public void SetCurrentWeaponSODirect(WeaponSO weaponSO)
+    {
+        if (weaponSO == null)
+        {
+            Debug.LogError("[ActiveWeapon] Cannot equip a null WeaponSO.");
+            return;
+        }
+
+        ActivateWeapon(weaponSO);
+    }
+
+    private void MouseFollowRotation()
+    {
+        if (Camera.main == null || GameInput.Instance == null)
+        {
+            return;
+        }
+
         Vector3 mousePos = GameInput.Instance.GetMousePosition();
         Vector2 direction = Camera.main.WorldToScreenPoint(transform.position) - mousePos;
         transform.right = -direction;
     }
 
-    private void MouseFolowingDirection() {
+    private void MouseFollowingDirection()
+    {
+        if (Camera.main == null || GameInput.Instance == null || Player.Instance == null)
+        {
+            return;
+        }
+
         Vector3 mousePos = GameInput.Instance.GetMousePosition();
         Vector3 playerScreenPoint = Utils.GetGameObjectScreenPoint(Player.Instance.transform);
-        //playerScreenPoint = Camera.main.ScreenToWorldPoint(playerScreenPoint);
 
-        float angleRotation = Mathf.Atan2(Mathf.Abs(playerScreenPoint.y - mousePos.y), Mathf.Abs(playerScreenPoint.x - mousePos.x)) * Mathf.Rad2Deg;
-        // float angleRotation = Mathf.Atan2(mousePos.y, mousePos.x) * Mathf.Rad2Deg;
-
-        if (mousePos.x < playerScreenPoint.x) {
+        if (mousePos.x < playerScreenPoint.x)
+        {
             isFlipped = true;
             transform.rotation = Quaternion.Euler(0, 180, 0);
-        } else {
+        }
+        else
+        {
             isFlipped = false;
             transform.rotation = Quaternion.Euler(0, 0, 0);
         }
     }
 
-    private void SetActiveWeaponRotation() {
-        if (Player.Instance.IsAlive()) {
-            if (currentWeaponSO.weaponSpinsAround) {
-                MouseFollowRotation();
-            } else {
-                MouseFolowingDirection();
-            }
+    private void SetActiveWeaponRotation()
+    {
+        if (Player.Instance == null || !Player.Instance.IsAlive())
+        {
+            return;
+        }
+
+        if (currentWeaponSO != null && currentWeaponSO.weaponSpinsAround)
+        {
+            MouseFollowRotation();
+        }
+        else
+        {
+            MouseFollowingDirection();
         }
     }
 
-    public void SetCurrentWeaponSO(int keyboardKey) {
-        // delete a previous weapon
-        if (currentWeaponSO != null && currentWeaponSO.weaponGameObject != null) {
+    private void ActivateWeapon(WeaponSO weaponSO)
+    {
+        if (weaponSO.weaponPrefab == null)
+        {
+            Debug.LogError($"[ActiveWeapon] Weapon prefab is missing on {weaponSO.name}.");
+            return;
+        }
+
+        if (currentWeaponSO != null && currentWeaponSO.weaponGameObject != null)
+        {
             Destroy(currentWeaponSO.weaponGameObject.gameObject);
+            currentWeaponSO.weaponGameObject = null;
         }
 
+        currentWeaponSO = weaponSO;
+        SetActiveWeaponRotation();
 
-        for (int i = 0; i < weaponSOList.Length; i++) {
-            if (weaponSOList[i].weaponKeyboardKey == keyboardKey) {
-                currentWeaponSO = weaponSOList[i];
-                
-                SetActiveWeaponRotation();
+        BaseWeapon currentWeaponPrefab = currentWeaponSO.weaponPrefab;
+        Vector3 prefabPosition = currentWeaponPrefab.transform.position;
 
-                BaseWeapon currentWeaponPrefab = currentWeaponSO.weaponPrefab;
-
-                // calculate position of the weapon based on ActiveWeapon rotation
-                // https://forum.unity.com/threads/calculating-global-position-from-local-rotations.654034/
-                var m = Matrix4x4.TRS(Vector3.zero, this.transform.rotation, Vector3.one);
-                Vector3 currentWeaponGameObjectPosition = m.MultiplyPoint(currentWeaponPrefab.transform.position);
- 
-                Vector3 prefabPosition;
-                if (isFlipped) {
-                    prefabPosition = new Vector3(-currentWeaponPrefab.transform.position.x, currentWeaponPrefab.transform.position.y, currentWeaponPrefab.transform.position.z);
-                } else {
-                    prefabPosition = currentWeaponPrefab.transform.position;
-                }
-
-                BaseWeapon currentWeaponGameObject = Instantiate(currentWeaponPrefab, transform.position + prefabPosition, transform.rotation * currentWeaponPrefab.transform.rotation);
-
-                currentWeaponGameObject.transform.parent = this.transform;
-                currentWeaponSO.weaponGameObject = currentWeaponGameObject;
-                break;
-            }
+        if (isFlipped)
+        {
+            prefabPosition = new Vector3(-prefabPosition.x, prefabPosition.y, prefabPosition.z);
         }
+
+        BaseWeapon spawnedWeapon = Instantiate(
+            currentWeaponPrefab,
+            transform.position + prefabPosition,
+            transform.rotation * currentWeaponPrefab.transform.rotation
+        );
+
+        spawnedWeapon.transform.SetParent(transform);
+        currentWeaponSO.weaponGameObject = spawnedWeapon;
     }
 }

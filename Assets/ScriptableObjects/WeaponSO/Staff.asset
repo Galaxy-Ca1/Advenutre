@@ -17,4 +17,4 @@ MonoBehaviour:
   weaponDamageAmout: 1
   weaponProjectileRange: 8
   weaponKeyboardKey: 3
-  weaponSpinsAround: 0
+  weaponSpinsAround: 1
